@@ -18,7 +18,7 @@ const program = new Command('create-stargate-mongoose-app')
   .arguments('[project-directory]')
   .usage(`${chalk.green('[project-directory]')} [options]`)
   .option(
-    '-s, --sample <name|github-url>',
+    '-s, --sample <name>',
     dedent`
   Which sample to bootstrap the project with. You can use the name of a sample
   from https://github.com/stargate/stargate-mongoose-sample-apps.
@@ -36,6 +36,35 @@ const program = new Command('create-stargate-mongoose-app')
 const samplesRepo = 'stargate/stargate-mongoose-sample-apps';
 const { listSamples, sample } = program.opts();
 const projectDirectory = program.args[0];
+
+if (listSamples) {
+  let response;
+
+  try {
+    response = await got('https://api.github.com/repos/stargate/stargate-mongoose-sample-apps/contents/');
+  } catch (error) {
+    throw new Error(`Unable to reach github.com`);
+  }
+
+  const files = JSON.parse(response.body);
+  const samples = files
+    .filter(file => file.type === 'dir' && !file.name.startsWith('.') && file.name !== 'bin')
+    .map(({ name }) => name);
+  console.log(`Available samples:\n\n${samples.join('\n')}\n`);
+  process.exit(0);
+}
+
+if (!projectDirectory) {
+  console.error();
+  console.error('Please specify the project directory:');
+  console.error(`  ${chalk.cyan(program.name())} ${chalk.green('<project-directory>')}`);
+  console.error();
+  console.error('For example:');
+  console.error(`  ${chalk.cyan(program.name())} ${chalk.green('my-sample-app')}`);
+  console.error();
+  console.error(`Run ${chalk.cyan(`${program.name()} --help`)} to see all options.`);
+  process.exit(1);
+}
 
 try {
   fs.mkdirSync(projectDirectory);
