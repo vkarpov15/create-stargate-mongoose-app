@@ -1,20 +1,24 @@
-'use strict';
-
 import { Command } from 'commander';
-import { Stream } from 'node:stream';
 import chalk from 'chalk';
 import dedent from 'dedent';
+import downloadAndExtractSample from '../src/downloadAndExtractSample.js';
+import fetchSamples from '../src/fetchSamples.js';
 import fs from 'fs';
-import got from 'got';
+import path from 'node:path';
 import prompts from 'prompts';
-import { promisify } from 'node:util';
-import { spawn } from 'node:child_process';
-import tar from 'tar';
+import runNpmInstall from '../src/runNpmInstall.js';
 
-const pipeline = promisify(Stream.pipeline);
+const currentFilePath = new URL(import.meta.url).pathname;
+const { version } = JSON.parse(
+  fs.readFileSync(path.join(currentFilePath, '..', '..', 'package.json'))
+);
+
+const samplesRepoOrg = 'stargate';
+const samplesRepoName = 'stargate-mongoose-sample-apps';
+const samplesRepo = `${samplesRepoOrg}/${samplesRepoName}`;
 
 const program = new Command('create-stargate-mongoose-app')
-  .version('0.0.0', '-v, --version', 'Print the version and exit')
+  .version(version, '-v, --version', 'Print the version and exit')
   .arguments('[project-directory]')
   .usage(`${chalk.green('[project-directory]')} [options]`)
   .option(
@@ -33,23 +37,11 @@ const program = new Command('create-stargate-mongoose-app')
   .allowUnknownOption()
   .parse(process.argv);
 
-const samplesRepo = 'stargate/stargate-mongoose-sample-apps';
 const { listSamples, sample } = program.opts();
 const projectDirectory = program.args[0];
 
 if (listSamples) {
-  let response;
-
-  try {
-    response = await got('https://api.github.com/repos/stargate/stargate-mongoose-sample-apps/contents/');
-  } catch (error) {
-    throw new Error(`Unable to reach github.com`);
-  }
-
-  const files = JSON.parse(response.body);
-  const samples = files
-    .filter(file => file.type === 'dir' && !file.name.startsWith('.') && file.name !== 'bin')
-    .map(({ name }) => name);
+  const samples = await fetchSamples(samplesRepo);
   console.log(`Available samples:\n\n${samples.join('\n')}\n`);
   process.exit(0);
 }
@@ -63,6 +55,18 @@ if (!projectDirectory) {
   console.error(`  ${chalk.cyan(program.name())} ${chalk.green('my-sample-app')}`);
   console.error();
   console.error(`Run ${chalk.cyan(`${program.name()} --help`)} to see all options.`);
+  process.exit(1);
+}
+
+if (!sample) {
+  console.error();
+  console.error('Please specify the sample to bootstrap from:');
+  console.error(`  ${chalk.cyan(program.name())} ${chalk.cyan('<project-directory>')} ${chalk.green('--sample <sample-name>')}`);
+  console.error();
+  console.error('For example:');
+  console.error(`  ${chalk.cyan(program.name())} ${chalk.cyan('my-sample-discord-bot')} ${chalk.green('--sample discord-bot')}`);
+  console.error();
+  console.error(`Run ${chalk.cyan(`${program.name()} --list-samples`)} to see all available samples.`);
   process.exit(1);
 }
 
@@ -87,27 +91,13 @@ try {
   fs.mkdirSync(projectDirectory);
 }
 
-const archiveUrl = `https://codeload.github.com/${samplesRepo}/tar.gz/main`;
-const archivePath = `stargate-mongoose-sample-apps-main/${sample}`;
-
-await pipeline(
-  got.stream(archiveUrl),
-  tar.extract({ cwd: projectDirectory, strip: 2 }, [archivePath])
+await downloadAndExtractSample(
+  samplesRepoOrg,
+  samplesRepoName,
+  sample,
+  projectDirectory
 );
-
-await new Promise((resolve, reject) => {
-  const childProcess = spawn('npm', ['install'], {
-    cwd: projectDirectory,
-    stdio: 'inherit',
-    env: { ...process.env, ADBLOCK: '1', DISABLE_OPENCOLLECTIVE: '1' },
-  });
-  childProcess.on('exit', code => {
-    if (code === 0) {
-      return resolve();
-    }
-    reject(new Error(`npm install failed with code ${code}`));
-  });
-});
+await runNpmInstall(projectDirectory);
 
 console.log();
 console.log(`${chalk.green('Success!')} Created project ${chalk.bold(sample)} at:`);
