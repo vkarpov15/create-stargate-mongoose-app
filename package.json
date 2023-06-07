@@ -5,6 +5,10 @@
     "create-stargate-mongoose-app": "bin/create-stargate-mongoose-app.js"
   },
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/vkarpov15/create-stargate-mongoose-app.git"
+  },
   "dependencies": {
     "chalk": "5.2.0",
     "commander": "10.0.1",
